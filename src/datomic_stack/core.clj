@@ -1,0 +1,2 @@
+(ns datomic-stack.core)
+
