@@ -5,7 +5,7 @@
   #?(:cljs (r/atom data)
      :clj (atom data)))
 
-(defn cursorlike [atom path]
-  #?(:cljs (r/cursor atom path)
-     :clj  (atom (get-in atom path))))
+(defn cursorlike [a path]
+  #?(:cljs (r/cursor a path)
+     :clj  (atom (get-in @a path))))
 
