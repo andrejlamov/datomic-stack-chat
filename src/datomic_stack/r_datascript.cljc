@@ -8,8 +8,8 @@
   (d/transact! conn data))
 
 (defn q [query {:keys [query-cache conn]}]
-  (swap! query-cache assoc query
-         (d/q query (d/db conn)))
+  (when (not (get-in @query-cache [query]))
+    (swap! query-cache assoc query (d/q query (d/db conn))))
   (cursorlike query-cache [query]))
 
 (defn update-query-cache [db cache]
