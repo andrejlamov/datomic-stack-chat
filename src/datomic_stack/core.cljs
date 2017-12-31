@@ -1,18 +1,22 @@
 (ns datomic-stack.core
-  (:require [reagent.core :as r]))
+  (:require [reagent.core :as r]
+            [datomic-stack.r-datascript :as rds]))
 
 (enable-console-print!)
 
-(defonce app-state (r/atom {:text "Hello"}))
+(defonce local-db (rds/create-db))
 
 (defn hello-world []
-  [:div
-   [:h1 (:text @app-state)]
-   [:h1 "World!"]])
+  (let [query '[:find ?n :where [_ :name ?n]]]
+    [:div
+     [:h1 (pr-str @(rds/q query local-db))]
+     [:h1 "World!"]]))
 
 (r/render-component [hello-world]
                     (. js/document (getElementById "app")))
 
 (defn on-js-reload []
-  (swap! app-state assoc :text "Hello")
-  (js/console.log @app-state))
+  (js/console.log
+   (pr-str local-db)))
+
+(rds/transact! local-db [{:name "Andrej"}])

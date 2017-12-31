@@ -4,6 +4,7 @@
                  [com.datomic/datomic-free "0.9.5656"]
                  [org.clojure/clojurescript "1.9.494"]
                  [org.clojure/core.async  "0.3.465"]
+                 [com.rpl/specter "1.0.5"]
                  [datascript "0.16.3"]
                  [reagent "0.7.0"]]
 
