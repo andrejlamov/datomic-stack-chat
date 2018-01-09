@@ -20,14 +20,13 @@
 
 (def message [(fact :message/text :db.type/string :db.cardinality/one)])
 
-(def permission [(fact :tx/read :db.type/string :db.cardinality/many)
-                 (fact :tx/user :db.type/string :db.cardinality/one)])
+(def permission [(fact :tx/can-read :db.type/string :db.cardinality/many)])
 
 (def user [
               (fact :user/name      :db.type/string :db.cardinality/one :db.unique/identity)
               (fact :user/password  :db.type/string :db.cardinality/one)
-              (fact :user/firstName :db.type/string :db.cardinality/one)
-              (fact :user/lastName  :db.type/string :db.cardinality/one)
+              (fact :user/first-name :db.type/string :db.cardinality/one)
+              (fact :user/last-name  :db.type/string :db.cardinality/one)
               (fact :user/email     :db.type/string :db.cardinality/one)])
 
 (def datomic (flatten [user message permission]))
