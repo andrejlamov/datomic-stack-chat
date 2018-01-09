@@ -44,7 +44,7 @@
         ds-conn   (ds/create-conn schema/datascript)
 
         andrej-tx {:db/id "datomic.tx" :tx/read #{"andrej"} :tx/user "andrej"}
-        alex-tx   {:db/id "datomic.tx" :tx/read #{"alex"} :user/name "alex"}
+        alex-tx   {:db/id "datomic.tx" :tx/read #{"alex"}   :tx/user "alex"}
 
         user    {
                  :user/name "andrej"
