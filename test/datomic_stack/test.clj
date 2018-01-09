@@ -24,15 +24,15 @@
                     (contains? (:tx/can-read d) name))))
 
 ;; Try to syncing data between datomic and datascript with pull
-(defn pull-d->ds [pattern eid d-db ds-conn]
+(defn pull-d->ds [d-db ds-conn pattern eid]
   (let [e (d/pull d-db pattern eid)
         _ (ds/transact! ds-conn [e])]
     (ds/pull (ds/db ds-conn) pattern eid)))
 
 (defn pull-d<-ds
-  ([pattern eid d-conn ds-conn tx-meta]
-   (pull-d<-ds pattern eid d-conn ds-conn [] tx-meta))
-  ([pattern eid d-conn ds-conn excludes tx-meta]
+  ([d-conn ds-conn pattern eid tx-meta]
+   (pull-d<-ds pattern eid [] d-conn ds-conn tx-meta))
+  ([d-conn ds-conn pattern eid excludes tx-meta]
    (let [e (ds/pull (ds/db ds-conn) pattern eid)
          e2 (apply dissoc (flatten [e excludes]))
          _ (d/transact d-conn [e2 tx-meta])]
@@ -55,7 +55,7 @@
         _                (d/transact d-conn [andrej andrej-tx])
 
         ;; Pull from datomic
-        {:keys [:db/id]} (pull-d->ds '[*] [:user/name "andrej"] (view d-conn "andrej") ds-conn)
+        {:keys [:db/id]} (pull-d->ds (view d-conn "andrej") ds-conn '[*] [:user/name "andrej"])
 
         ;; Change password
         _                (ds/transact! ds-conn
@@ -63,11 +63,11 @@
                                          :user/password "secret"
                                          :user/password-repeat "secret"}])
         ;; Push to datomic
-        _                (pull-d<-ds '[*] [:user/name "andrej"] d-conn ds-conn [:user/password-repeat] andrej-tx)
+        _                (pull-d<-ds d-conn ds-conn '[*] [:user/name "andrej"] [:user/password-repeat] andrej-tx)
 
         ;; Alex tries to change my password
         _                (d/transact d-conn [{:user/name "andrej" :user/password "123"} alex-tx])
         other-pw         (d/pull (view d-conn "alex")   [:user/password] id)
-        andrej-pw          (d/pull (view d-conn "andrej") [:user/password] id)]
+        andrej-pw        (d/pull (view d-conn "andrej") [:user/password] id)]
     (t/is (= other-pw {:user/password "123"}))
     (t/is (= andrej-pw  {:user/password "secret"}))))
