@@ -1,8 +1,20 @@
 (ns datomic-stack.core
   (:require [reagent.core :as r]
+            [clojure.browser.net :as net]
+            [clojure.browser.event :as event]
             [datomic-stack.r-datascript :as rds]))
 
 (enable-console-print!)
+
+(defonce ws (let [conn (net/websocket-connection)]
+              (net/connect conn "ws://localhost:3449/ws")
+              conn))
+
+(event/listen ws :opened (fn []
+                           (println "opened")
+                           (net/transmit ws "hello echo ")))
+(event/listen ws :message (fn [d] (js/console.log "messsage" (.-message d) )))
+
 
 (defonce local-db (rds/create-db))
 

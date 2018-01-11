@@ -5,6 +5,13 @@
                  [org.clojure/clojurescript "1.9.494"]
                  [org.clojure/core.async  "0.3.465"]
                  [com.rpl/specter "1.0.5"]
+
+                 [http-kit "2.2.0"]
+                 [ring-cljsjs "0.1.0"]
+                 [compojure "1.5.2"]
+                 [ring "1.6.3"]
+                 [ring-cljsjs "0.1.0"]
+
                  [datascript "0.16.3"]
                  [reagent "0.7.0"]]
 
@@ -34,7 +41,7 @@
                            :optimizations :advanced
                            :pretty-print false}}]}
 
-  ;; :figwheel { :ring-handler datomic-stack.server/handler}
+  :figwheel { :ring-handler datomic-stack.core/handler}
 
   :profiles {:dev {:dependencies [[binaryage/devtools "0.9.4"]
                                   [figwheel-sidecar "0.5.15-SNAPSHOT"]
