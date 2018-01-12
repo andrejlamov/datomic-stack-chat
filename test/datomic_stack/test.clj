@@ -73,6 +73,8 @@
     (t/is (= other-pw {:user/password "123"}))
     (t/is (= andrej-pw  {:user/password "secret"}))))
 
+;; TODO: Match on unique identities as well, use schema to know what to patternmatch?
+;; TODO: How about nested collections?
 (defn can-upsert? [db id groups]
   (if id
     (let [[tx-id] (first (d/q '[:find ?tx :in $ ?e :where [?e _ _ ?tx _]] db id))
@@ -85,6 +87,7 @@
     (d/transact conn [data tx-meta])
     ))
 
+;; TODO: Pull metadata about message (author info, timestamp)
 (t/deftest chat-room-test
   (let [d-conn (fresh-db schema/datomic)
         andrej-tx {:db/id "datomic.tx" :tx/can-read #{"andrej", "room1"} :tx/can-upsert #{"andrej"}}
