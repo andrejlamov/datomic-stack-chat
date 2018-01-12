@@ -34,4 +34,4 @@
 (def datascript (-> [user]
                  flatten
                  d->ds-schema
-                 (merge {:user/password-repeat {:db.cardinaliry :db.cardinality/one}})))
+                 (merge {:user/password-repeat {:db.cardinality :db.cardinality/one}})))
