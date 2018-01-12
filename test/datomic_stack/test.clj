@@ -3,7 +3,8 @@
              [datascript.core :as ds]
              [datomic.api :as d]
              [datomic-stack.schema :as schema]
-             [datascript.db :as db]))
+             [datascript.db :as db]
+             [clojure.set :as set]))
 
 (defn fresh-db [schemaema]
   (let [db-name (gensym)
@@ -72,11 +73,11 @@
     (t/is (= other-pw {:user/password "123"}))
     (t/is (= andrej-pw  {:user/password "secret"}))))
 
-(defn can-upsert? [db id group]
+(defn can-upsert? [db id groups]
   (if id
     (let [[tx-id] (first (d/q '[:find ?tx :in $ ?e :where [?e _ _ ?tx _]] db id))
           {:keys [tx/can-upsert]} (d/pull db '[:tx/can-upsert] tx-id)]
-      (= [group] can-upsert))
+      (not (empty? (set/intersection (set groups) (set can-upsert)))))
     true))
 
 (defn restricted-transact [conn {:keys [db/id] :as data} author tx-meta]
@@ -95,13 +96,13 @@
 
         ;; Alex wants to change my message by finding its id and upsert
         [id] (first (d/q '[:find ?eid :where [?eid :message/text]] (view d-conn "room1")))
-        _ (restricted-transact d-conn {:db/id id :message/text "lololol"} "alex" alex-tx)
+        _ (restricted-transact d-conn {:db/id id :message/text "lololol"} ["alex"] alex-tx)
         ;; it fails
         log (d/q '[:find ?m :where [_ :message/text ?m]] (view d-conn "room1"))
         _ (t/is (= #{["hello andrej"] ["hello alex"]} log))
 
         ;; But I can change my message
-        _ (restricted-transact d-conn {:db/id id :message/text "lololol"} "andrej" andrej-tx)
+        _ (restricted-transact d-conn {:db/id id :message/text "lololol"} ["andrej"] andrej-tx)
         log (d/q '[:find ?m :where [_ :message/text ?m]] (view d-conn "room1"))
         _ (t/is (= #{["hello andrej"] ["lololol"]} log))
         ]))
