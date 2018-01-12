@@ -71,3 +71,37 @@
         andrej-pw        (d/pull (view d-conn "andrej") [:user/password] id)]
     (t/is (= other-pw {:user/password "123"}))
     (t/is (= andrej-pw  {:user/password "secret"}))))
+
+(defn can-upsert? [db id group]
+  (if id
+    (let [[tx-id] (first (d/q '[:find ?tx :in $ ?e :where [?e _ _ ?tx _]] db id))
+          {:keys [tx/can-upsert]} (d/pull db '[:tx/can-upsert] tx-id)]
+      (= [group] can-upsert))
+    true))
+
+(defn restricted-transact [conn {:keys [db/id] :as data} author tx-meta]
+  (when (can-upsert? (d/db conn) id author)
+    (d/transact conn [data tx-meta])
+    ))
+
+(t/deftest chat-room-test
+  (let [d-conn (fresh-db schema/datomic)
+        andrej-tx {:db/id "datomic.tx" :tx/can-read #{"andrej", "room1"} :tx/can-upsert #{"andrej"}}
+        alex-tx   {:db/id "datomic.tx" :tx/can-read #{"alex", "room1"} :tx/can-upsert #{"alex"}}
+        ;; I say hello
+        _ (d/transact d-conn [{:message/text "hello alex"} andrej-tx])
+        ;; Alex says hello
+        _ (d/transact d-conn [{:message/text "hello andrej"} alex-tx])
+
+        ;; Alex wants to change my message by finding its id and upsert
+        [id] (first (d/q '[:find ?eid :where [?eid :message/text]] (view d-conn "room1")))
+        _ (restricted-transact d-conn {:db/id id :message/text "lololol"} "alex" alex-tx)
+        ;; it fails
+        log (d/q '[:find ?m :where [_ :message/text ?m]] (view d-conn "room1"))
+        _ (t/is (= #{["hello andrej"] ["hello alex"]} log))
+
+        ;; But I can change my message
+        _ (restricted-transact d-conn {:db/id id :message/text "lololol"} "andrej" andrej-tx)
+        log (d/q '[:find ?m :where [_ :message/text ?m]] (view d-conn "room1"))
+        _ (t/is (= #{["hello andrej"] ["lololol"]} log))
+        ]))

@@ -20,7 +20,8 @@
 
 (def message [(fact :message/text :db.type/string :db.cardinality/one)])
 
-(def permission [(fact :tx/can-read :db.type/string :db.cardinality/many)])
+(def permission [(fact :tx/can-read :db.type/string :db.cardinality/many)
+                 (fact :tx/can-upsert :db.type/string :db.cardinality/many)])
 
 (def user [
               (fact :user/name      :db.type/string :db.cardinality/one :db.unique/identity)
