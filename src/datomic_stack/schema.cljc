@@ -18,20 +18,26 @@
                                    :db/valueType)})
                      schema)))
 
-(def message [(fact :message/text :db.type/string :db.cardinality/one)])
+(def datomic [
+              (fact :message/text :db.type/string :db.cardinality/one)
+              (fact :message/author :db.type/ref :db.cardinality/one)
 
-(def permission [(fact :tx/can-read :db.type/string :db.cardinality/many)
-                 (fact :tx/can-upsert :db.type/string :db.cardinality/many)])
+              (fact :tx/can-read :db.type/string :db.cardinality/many)
+              (fact :tx/can-upsert :db.type/string :db.cardinality/many)
+              (fact :tx/author :db.type/string :db.cardinality/one)
 
-(def user [
-              (fact :user/name      :db.type/string :db.cardinality/one :db.unique/identity)
-              (fact :user/password  :db.type/string :db.cardinality/one)
+              (fact :user/name :db.type/string :db.cardinality/one :db.unique/identity)
+              (fact :user/password :db.type/string :db.cardinality/one)
               (fact :user/first-name :db.type/string :db.cardinality/one)
-              (fact :user/last-name  :db.type/string :db.cardinality/one)
-              (fact :user/email     :db.type/string :db.cardinality/one)])
+              (fact :user/last-name :db.type/string :db.cardinality/one)
+              (fact :user/email :db.type/string :db.cardinality/one)])
 
-(def datomic (flatten [user message permission]))
-(def datascript (-> [user]
-                 flatten
-                 d->ds-schema
-                 (merge {:user/password-repeat {:db.cardinality :db.cardinality/one}})))
+(def datascript (-> datomic
+                    d->ds-schema
+                    (merge {:user/password-repeat {:db.cardinality :db.cardinality/one}})))
+
+(def identity-keys
+  (s/select [s/ALL (s/if-path [:db/unique (s/pred= :db.unique/identity)] :db/ident)] datomic))
+
+(defn identities [data]
+  (vec (select-keys data identity-keys)))

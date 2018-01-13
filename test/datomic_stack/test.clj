@@ -3,7 +3,9 @@
              [datascript.core :as ds]
              [datomic.api :as d]
              [datomic-stack.schema :as schema]
+             [datomic-stack.r-datomic :as rd]
              [datascript.db :as db]
+             [com.rpl.specter :as s]
              [clojure.set :as set]))
 
 (defn fresh-db [schemaema]
@@ -44,8 +46,8 @@
   (let [d-conn    (fresh-db schema/datomic)
         ds-conn   (ds/create-conn schema/datascript)
 
-        andrej-tx {:db/id "datomic.tx" :tx/can-read #{"andrej"}}
-        alex-tx   {:db/id "datomic.tx" :tx/can-read #{"alex"}}
+        andrej-tx {:db/id "datomic.tx" :tx/can-read #{"andrej"} :tx/can-upsert #{"andrej"}}
+        alex-tx   {:db/id "datomic.tx" :tx/can-read #{"alex"} :tx/can-upsert #{"alex"}}
 
         andrej    {:user/name "andrej"
                    :user/first-name "Andrej"
@@ -53,7 +55,7 @@
                    :user/password "abc"
                    :user/email "andrej.lamov@gmail.com"}
         ;; Init Andrej
-        _                (d/transact d-conn [andrej andrej-tx])
+        _                (rd/restricted-transact d-conn andrej "andrej" andrej-tx)
 
         ;; Pull from datomic
         {:keys [:db/id]} (pull-d->ds (view d-conn "andrej") ds-conn '[*] [:user/name "andrej"])
@@ -64,48 +66,62 @@
                                          :user/password "secret"
                                          :user/password-repeat "secret"}])
         ;; Push to datomic
-        _                (pull-d<-ds d-conn ds-conn '[*] [:user/name "andrej"] [:user/password-repeat] andrej-tx)
+        {:keys [:user/password]}                (pull-d<-ds d-conn ds-conn '[*] [:user/name "andrej"] [:user/password-repeat] andrej-tx)]
+    (t/is (= password  "secret"))))
 
-        ;; Alex tries to change my password
-        _                (d/transact d-conn [{:user/name "andrej" :user/password "123"} alex-tx])
-        other-pw         (d/pull (view d-conn "alex")   [:user/password] id)
-        andrej-pw        (d/pull (view d-conn "andrej") [:user/password] id)]
-    (t/is (= other-pw {:user/password "123"}))
-    (t/is (= andrej-pw  {:user/password "secret"}))))
+(t/deftest identity-keys
+  (let [schema-identities #{:user/name :other/identity}]
+    (t/is
+     (= [[:user/name "andrej"]]
+        (schema/identities {:user/name "andrej" :other/value 123})))
+    (t/is
+     (= #{:user/name}
+        (set schema/identity-keys)))))
 
-;; TODO: Match on unique identities as well, use schema to know what to patternmatch?
-;; TODO: How about nested collections?
-(defn can-upsert? [db id groups]
-  (if id
-    (let [[tx-id] (first (d/q '[:find ?tx :in $ ?e :where [?e _ _ ?tx _]] db id))
-          {:keys [tx/can-upsert]} (d/pull db '[:tx/can-upsert] tx-id)]
-      (not (empty? (set/intersection (set groups) (set can-upsert)))))
-    true))
-
-(defn restricted-transact [conn {:keys [db/id] :as data} author tx-meta]
-  (when (can-upsert? (d/db conn) id author)
-    (d/transact conn [data tx-meta])
-    ))
-
-;; TODO: Pull metadata about message (author info, timestamp)
-(t/deftest chat-room-test
+(t/deftest restriction
   (let [d-conn (fresh-db schema/datomic)
-        andrej-tx {:db/id "datomic.tx" :tx/can-read #{"andrej", "room1"} :tx/can-upsert #{"andrej"}}
-        alex-tx   {:db/id "datomic.tx" :tx/can-read #{"alex", "room1"} :tx/can-upsert #{"alex"}}
+        andrej-tx {:db/id "datomic.tx" :tx/author "andrej" :tx/can-read #{"andrej", "room1"} :tx/can-upsert #{"andrej"}}
+        alex-tx   {:db/id "datomic.tx" :tx/author "alex" :tx/can-read #{"alex", "room1"} :tx/can-upsert #{"alex"}}
+
+        alex    {:user/name "alex"
+                 :user/first-name "Alexander"
+                 :user/last-name "Wingård"
+                 :user/password "123"
+                 :user/email "alexander.wingard@gmail.com"}
+
+        andrej  {:user/name "andrej"
+                 :user/first-name "Andrej"
+                 :user/last-name "Lamov"
+                 :user/password "abc"
+                 :user/email "andrej.lamov@gmail.com"}
+
+        ;; Add users
+        _ (rd/restricted-transact d-conn andrej "andrej" andrej-tx)
+        _ (rd/restricted-transact d-conn alex "alex" alex-tx)
+
         ;; I say hello
-        _ (d/transact d-conn [{:message/text "hello alex"} andrej-tx])
+        _ (rd/restricted-transact d-conn {:message/text "hello alex" :message/author andrej} "andrej" andrej-tx)
+
         ;; Alex says hello
-        _ (d/transact d-conn [{:message/text "hello andrej"} alex-tx])
+        _ (rd/restricted-transact d-conn {:message/text "hello andrej" :message/author alex} "alex" alex-tx)
 
         ;; Alex wants to change my message by finding its id and upsert
         [id] (first (d/q '[:find ?eid :where [?eid :message/text]] (view d-conn "room1")))
-        _ (restricted-transact d-conn {:db/id id :message/text "lololol"} ["alex"] alex-tx)
+        _ (rd/restricted-transact d-conn {:db/id id :message/text "lololol" :message/author andrej} "alex" alex-tx)
+
         ;; it fails
         log (d/q '[:find ?m :where [_ :message/text ?m]] (view d-conn "room1"))
         _ (t/is (= #{["hello andrej"] ["hello alex"]} log))
 
+        ;; Alex wants to change my password by unique identitiy :user/name
+        _ (rd/restricted-transact d-conn {:user/name "andrej" :user/password "lololol"} "alex" alex-tx)
+       {:keys [:user/password]} (d/pull (view d-conn "room1") [:user/password] [:user/name "andrej"])
+
+        ;; Still unchanged
+        _ (t/is (= "abc" password))
+
         ;; But I can change my message
-        _ (restricted-transact d-conn {:db/id id :message/text "lololol"} ["andrej"] andrej-tx)
+        _ (rd/restricted-transact d-conn {:db/id id :message/text "lololol"} ["andrej"] andrej-tx)
         log (d/q '[:find ?m :where [_ :message/text ?m]] (view d-conn "room1"))
         _ (t/is (= #{["hello andrej"] ["lololol"]} log))
         ]))
