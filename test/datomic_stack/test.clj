@@ -9,12 +9,12 @@
              [clojure.set :as set]
              [datomic-stack.util :as u]))
 
-(defn fresh-db [schemaema]
+(defn fresh-db [schema]
   (let [db-name (gensym)
         db-uri (str "datomic:mem://" db-name)]
     (d/create-database db-uri)
     (let [conn (d/connect db-uri)]
-      @(d/transact conn schemaema)
+      @(d/transact conn schema)
       conn)))
 
 
