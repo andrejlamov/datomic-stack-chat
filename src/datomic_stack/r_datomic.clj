@@ -16,14 +16,16 @@
 (defn restricted-transact [conn data author tx-meta]
   ;; TODO: What if several identities?
   (let [ident-value (first (schema/identities data))
-        _ (println ident-value)
         id (:db/id data)
         eid (or id
                 (:db/id (d/pull (d/db conn) [:db/id] ident-value)))]
     (when (can-upsert? (d/db conn) eid author)
       (d/transact conn [data tx-meta]))))
 
-;; TODO: Pull metadata about message (author info, timestamp)
-(defn pull-about [] nil)
-
-(or nil nil)
+(defn pull-tx [conn eid]
+  (let [db (d/db conn)
+        txid  (->> eid
+                   (find-txid-for-eid db)
+                   first
+                   first)]
+    (d/pull db '[*] txid)))

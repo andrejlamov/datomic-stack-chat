@@ -6,7 +6,8 @@
              [datomic-stack.r-datomic :as rd]
              [datascript.db :as db]
              [com.rpl.specter :as s]
-             [clojure.set :as set]))
+             [clojure.set :as set]
+             [datomic-stack.util :as u]))
 
 (defn fresh-db [schemaema]
   (let [db-name (gensym)
@@ -49,24 +50,24 @@
         andrej-tx {:db/id "datomic.tx" :tx/can-read #{"andrej"} :tx/can-upsert #{"andrej"}}
         alex-tx   {:db/id "datomic.tx" :tx/can-read #{"alex"} :tx/can-upsert #{"alex"}}
 
-        andrej    {:user/name "andrej"
+        andrej   {:user/name "andrej"
                    :user/first-name "Andrej"
                    :user/last-name "Lamov"
                    :user/password "abc"
                    :user/email "andrej.lamov@gmail.com"}
         ;; Init Andrej
-        _                (rd/restricted-transact d-conn andrej "andrej" andrej-tx)
 
+        _ (rd/restricted-transact d-conn andrej "andrej" andrej-tx)
         ;; Pull from datomic
         {:keys [:db/id]} (pull-d->ds (view d-conn "andrej") ds-conn '[*] [:user/name "andrej"])
 
         ;; Change password
-        _                (ds/transact! ds-conn
-                                       [{:db/id id
-                                         :user/password "secret"
-                                         :user/password-repeat "secret"}])
+        _ (ds/transact! ds-conn
+                        [{:db/id id
+                          :user/password "secret"
+                          :user/password-repeat "secret"}])
         ;; Push to datomic
-        {:keys [:user/password]}                (pull-d<-ds d-conn ds-conn '[*] [:user/name "andrej"] [:user/password-repeat] andrej-tx)]
+        {:keys [:user/password]} (pull-d<-ds d-conn ds-conn '[*] [:user/name "andrej"] [:user/password-repeat] andrej-tx)]
     (t/is (= password  "secret"))))
 
 (t/deftest identity-keys
@@ -125,3 +126,27 @@
         log (d/q '[:find ?m :where [_ :message/text ?m]] (view d-conn "room1"))
         _ (t/is (= #{["hello andrej"] ["lololol"]} log))
         ]))
+
+(t/deftest pull-tx-for-eid
+  (let [conn (fresh-db schema/datomic)
+
+        andrej-tx {:db/id "datomic.tx" :tx/author "andrej" :tx/can-read #{"andrej", "room1"} :tx/can-upsert #{"andrej"}}
+
+        andrej {:user/name "andrej"
+                :user/first-name "Andrej"
+                :user/last-name "Lamov"
+                :user/password "abc"
+                :user/email "andrej.lamov@gmail.com"}
+
+        _ (rd/restricted-transact conn {:message/text "Hello!" :message/author andrej} "andrej" andrej-tx)
+        id1 (->>
+             (d/pull (view conn "andrej") [:db/id] [:user/name "andrej"])
+             :db/id)
+        id2 (->> (d/q '[:find ?eid :where [?eid :message/text]] (view conn "room1"))
+                 (first)
+                 (first))
+        ]
+        (t/is (= {:db/id nil} (rd/pull-tx conn -1)))
+        (t/is (= andrej-tx
+                 (u/kv-intersection andrej-tx (rd/pull-tx conn id1))
+                 (u/kv-intersection andrej-tx (rd/pull-tx conn id2))))))
