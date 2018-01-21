@@ -28,6 +28,11 @@
 
               (fact :user/name :db.type/string :db.cardinality/one :db.unique/identity)
               (fact :user/password :db.type/string :db.cardinality/one)
+
+              ;; should always be prefixed with username
+              (fact :group/name :db.type/string :db.cardinality/one)
+              (fact :group/owner :db.type/string :db.cardinality/one)
+
               (fact :user/first-name :db.type/string :db.cardinality/one)
               (fact :user/last-name :db.type/string :db.cardinality/one)
               (fact :user/email :db.type/string :db.cardinality/one)])

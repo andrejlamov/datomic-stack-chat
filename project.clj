@@ -41,7 +41,7 @@
                            :optimizations :advanced
                            :pretty-print false}}]}
 
-  :figwheel { :ring-handler datomic-stack.core/handler}
+  :figwheel { :ring-handler datomic-stack.server/handler}
 
   :profiles {:dev {:dependencies [[binaryage/devtools "0.9.4"]
                                   [figwheel-sidecar "0.5.15-SNAPSHOT"]

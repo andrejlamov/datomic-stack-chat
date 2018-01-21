@@ -4,7 +4,6 @@
              [datomic.api :as d]
              [datomic-stack.schema :as schema]
              [datomic-stack.r-datomic :as rd]
-             [datascript.db :as db]
              [com.rpl.specter :as s]
              [clojure.set :as set]
              [datomic-stack.util :as u]))
@@ -16,68 +15,6 @@
     (let [conn (d/connect db-uri)]
       @(d/transact conn schema)
       conn)))
-
-
-(defn filter-db [conn pred]
-  (d/filter (d/db conn)
-            (fn [db datom]
-              (pred (d/entity db (.tx datom))))))
-
-(defn view [conn name]
-  (filter-db conn (fn [d]
-                    (contains? (:tx/can-read d) name))))
-
-;; Try to syncing data between datomic and datascript with pull
-(defn pull-d->ds [d-db ds-conn pattern eid]
-  (let [e (d/pull d-db pattern eid)
-        _ (ds/transact! ds-conn [e])]
-    (ds/pull (ds/db ds-conn) pattern eid)))
-
-(defn pull-d<-ds
-  ([d-conn ds-conn pattern eid tx-meta]
-   (pull-d<-ds pattern eid [] d-conn ds-conn tx-meta))
-  ([d-conn ds-conn pattern eid excludes tx-meta]
-   (let [e (ds/pull (ds/db ds-conn) pattern eid)
-         e2 (apply dissoc (flatten [e excludes]))
-         _ (d/transact d-conn [e2 tx-meta])]
-     (d/pull (d/db d-conn) pattern eid))))
-
-
-(t/deftest pull-d<->ds
-  (let [d-conn    (fresh-db schema/datomic)
-        ds-conn   (ds/create-conn schema/datascript)
-
-        andrej-tx {:db/id "datomic.tx"
-                   :tx/can-read #{"andrej"}
-                   :tx/can-upsert #{"andrej"}}
-        alex-tx   {:db/id "datomic.tx"
-                   :tx/can-read #{"alex"}
-                   :tx/can-upsert #{"alex"}}
-
-        andrej   {:user/name "andrej"
-                  :user/first-name "Andrej"
-                  :user/last-name "Lamov"
-                  :user/password "abc"
-                  :user/email "andrej.lamov@gmail.com"}
-        ;; Init Andrej
-
-        _ (rd/restricted-transact d-conn andrej "andrej" andrej-tx)
-        ;; Pull from datomic
-        {:keys [:db/id]} (pull-d->ds (view d-conn "andrej") ds-conn
-                                     '[*]
-                                     [:user/name "andrej"])
-
-        ;; Change password
-        _ (ds/transact! ds-conn
-                        [{:db/id id
-                          :user/password "secret"
-                          :user/password-repeat "secret"}])
-        ;; Push to datomic
-        {:keys [:user/password]} (pull-d<-ds d-conn ds-conn
-                                             '[*]
-                                             [:user/name "andrej"]
-                                             [:user/password-repeat] andrej-tx)]
-    (t/is (= password  "secret"))))
 
 (t/deftest identity-keys
   (let [schema-identities #{:user/name :other/identity}]
@@ -128,7 +65,7 @@
         ;; Alex wants to change my message by finding its id and upsert
         [id] (first (d/q '[:find ?eid
                            :where [?eid :message/text]]
-                         (view d-conn "room1")))
+                         (rd/view d-conn "room1")))
         _ (rd/restricted-transact d-conn {:db/id id
                                           :message/text "lololol"
                                           :message/author andrej}
@@ -137,14 +74,14 @@
         ;; it fails
         log (d/q '[:find ?m
                    :where [_ :message/text ?m]]
-                 (view d-conn "room1"))
+                 (rd/view d-conn "room1"))
         _ (t/is (= #{["hello andrej"] ["hello alex"]} log))
 
         ;; Alex wants to change my password by unique identitiy :user/name
         _ (rd/restricted-transact d-conn {:user/name "andrej"
                                           :user/password "lololol"}
                                   "alex" alex-tx)
-        {:keys [:user/password]} (d/pull (view d-conn "room1")
+        {:keys [:user/password]} (d/pull (rd/view d-conn "room1")
                                          [:user/password]
                                          [:user/name "andrej"])
 
@@ -157,7 +94,7 @@
                                   ["andrej"] andrej-tx)
         log (d/q '[:find ?m
                    :where [_ :message/text ?m]]
-                 (view d-conn "room1"))
+                 (rd/view d-conn "room1"))
         _ (t/is (= #{["hello andrej"] ["lololol"]} log))]))
 
 (t/deftest pull-tx-for-eid
@@ -178,11 +115,11 @@
                                         :message/author andrej}
                                   "andrej" andrej-tx)
         id1 (->>
-             (d/pull (view conn "andrej") [:db/id] [:user/name "andrej"])
+             (d/pull (rd/view conn "andrej") [:db/id] [:user/name "andrej"])
              :db/id)
         id2 (->> (d/q '[:find ?eid
                         :where [?eid :message/text]]
-                      (view conn "room1"))
+                      (rd/view conn "room1"))
                  (first)
                  (first))
         ]
